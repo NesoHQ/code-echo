@@ -16,6 +16,9 @@ import (
 var (
 	docOutputFile string
 	docType       string
+	// NEW: Add quiet and verbose flags for doc command
+	docVerbose bool
+	docQuiet   bool
 )
 
 // ScanResult is an alias for scanner.ScanResult for backward compatibility
@@ -33,7 +36,13 @@ of documentation based on the codebase structure and content.
 Supported documentation types:
 • readme    - Generate a comprehensive README.md
 • api       - Generate API documentation (for web projects)
-• overview  - Generate project overview documentation`,
+• overview  - Generate project overview documentation
+
+Examples:
+  codeecho doc .                          # Generate README
+  codeecho doc . --type api               # Generate API docs
+  codeecho doc . --type overview -o OVERVIEW.md
+  codeecho doc . --verbose                # Show progress for each file`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runDoc,
 }
@@ -44,10 +53,15 @@ func init() {
 	// Add flags
 	docCmd.Flags().StringVarP(&docOutputFile, "output", "o", "", "Output file (default: README.md)")
 	docCmd.Flags().StringVarP(&docType, "type", "t", "readme", "Documentation type: readme, api, overview")
+
+	// NEW: Add progress flags
+	docCmd.Flags().BoolVarP(&docVerbose, "verbose", "v", false, "Show detailed progress information")
+	docCmd.Flags().BoolVarP(&docQuiet, "quiet", "q", false, "Suppress progress output")
 }
 
 // scanRepository uses AnalysisScanner for full repository analysis
-func scanRepository(path string) (*ScanResult, error) {
+// ENHANCED: Now supports progress callbacks
+func scanRepository(path string, showProgress bool, verbose bool) (*ScanResult, error) {
 	opts := scanner.ScanOptions{
 		IncludeSummary:       true,
 		IncludeDirectoryTree: true,
@@ -63,6 +77,32 @@ func scanRepository(path string) (*ScanResult, error) {
 
 	// Use analysis scanner (not streaming) for full in-memory analysis
 	analysisScanner := scanner.NewAnalysisScanner(path, opts)
+
+	// NEW: Add progress callback if requested
+	if showProgress {
+		analysisScanner.SetProgressCallback(func(progress scanner.ScanProgress) {
+			if verbose {
+				// Verbose: Show every file
+				fmt.Printf("  [%s] %s (%d/%d files)\n",
+					progress.Phase,
+					progress.CurrentFile,
+					progress.ProcessedFiles,
+					progress.TotalFiles)
+			} else {
+				// Normal: Single updating line
+				bar := utils.CreateProgressBar(progress.ProcessedFiles, progress.TotalFiles, 20)
+
+				// Truncate filename if too long
+				displayFile := progress.CurrentFile
+				if len(displayFile) > 30 {
+					displayFile = "..." + displayFile[len(displayFile)-27:]
+				}
+
+				fmt.Printf("\r  %s %s", bar, displayFile)
+			}
+		})
+	}
+
 	return analysisScanner.Scan()
 }
 
@@ -75,6 +115,8 @@ func formatBytes(bytes int64) string {
 }
 
 func runDoc(cmd *cobra.Command, args []string) error {
+	startTime := time.Now()
+
 	// Determine target path
 	targetPath := "."
 	if len(args) > 0 {
@@ -92,15 +134,27 @@ func runDoc(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	fmt.Printf("Generating %s documentation for %s...\n", docType, absPath)
+	if !docQuiet {
+		fmt.Printf("📚 Generating %s documentation for %s...\n", docType, absPath)
+	}
 
-	// First, scan the repository using AnalysisScanner
-	result, err := scanRepository(absPath)
+	// NEW: Use progress-aware scan
+	result, err := scanRepository(absPath, !docQuiet, docVerbose)
+
+	// Clear progress line if it was shown
+	if !docQuiet && !docVerbose {
+		fmt.Print("\r\033[K") // Clear current line
+	}
+
 	if err != nil {
 		return fmt.Errorf("scan failed: %w", err)
 	}
 
 	// Generate documentation based on type
+	if !docQuiet {
+		fmt.Printf("✍️  Generating documentation...\n")
+	}
+
 	var doc string
 	switch strings.ToLower(docType) {
 	case "readme":
@@ -136,8 +190,18 @@ func runDoc(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to write documentation file: %w", err)
 	}
 
-	fmt.Printf("Documentation written to %s\n", outputFile)
-	fmt.Printf("Documentation Summary: %d files analyzed\n", result.TotalFiles)
+	duration := time.Since(startTime)
+
+	// NEW: Enhanced summary
+	if !docQuiet {
+		fmt.Printf("\n✅ Documentation written to %s\n", outputFile)
+		fmt.Printf("📊 Summary:\n")
+		fmt.Printf("  ├─ Files analyzed: %d\n", result.TotalFiles)
+		fmt.Printf("  ├─ Total size: %s\n", utils.FormatBytes(result.TotalSize))
+		fmt.Printf("  ├─ Languages: %d types\n", len(result.LanguageCounts))
+		fmt.Printf("  └─ Duration: %s\n", utils.FormatDuration(duration))
+		fmt.Println()
+	}
 
 	return nil
 }

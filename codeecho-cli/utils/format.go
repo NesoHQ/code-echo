@@ -60,7 +60,7 @@ func FormatDuration(d time.Duration) string {
 // NEW: Create a simple progress bar
 func CreateProgressBar(current, total int, width int) string {
 	if total == 0 {
-		return "[" + strings.Repeat("?", width) + "]"
+		return "[" + strings.Repeat("█", width) + "]"
 	}
 
 	percentage := float64(current) / float64(total)
