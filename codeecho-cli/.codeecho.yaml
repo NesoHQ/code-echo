@@ -1,0 +1,31 @@
+# Output format
+format: xml
+
+# File filtering
+exclude_dirs:
+  - .git
+  - node_modules
+  - vendor
+  - dist
+  - build
+
+include_exts:
+  - .go
+  - .js
+  - .ts
+
+# Content options
+include_content: true
+include_summary: true
+include_tree: true
+show_line_numbers: false
+
+# Processing
+compress_code: false
+remove_comments: false
+remove_empty_lines: false
+
+# Output
+output: ''
+quiet: false
+verbose: false

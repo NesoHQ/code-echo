@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/NesoHQ/code-echo/codeecho-cli/config"
 	"github.com/NesoHQ/code-echo/codeecho-cli/output"
 	"github.com/NesoHQ/code-echo/codeecho-cli/scanner"
 	"github.com/NesoHQ/code-echo/codeecho-cli/types"
@@ -35,6 +36,9 @@ var (
 	verbose    bool // Show detailed progress
 	quiet      bool // Suppress progress output
 	strictMode bool // Fail on any error
+
+	// NEW: Config file flag
+	configFile string
 )
 
 var scanCmd = &cobra.Command{
@@ -52,6 +56,7 @@ Output Formats:
 Examples:
   codeecho scan .                              # Basic XML scan
   codeecho scan . --format json               # JSON output
+	codeecho scan . --config /path/to/.codeecho.yaml
   codeecho scan . --remove-comments           # Strip comments
   codeecho scan . --compress-code             # Minify code
   codeecho scan . --no-summary                # Skip file summary
@@ -65,7 +70,6 @@ Examples:
 func init() {
 	rootCmd.AddCommand(scanCmd)
 
-	// Existing flags remain...
 	scanCmd.Flags().StringVarP(&outputFormat, "format", "f", "xml", "Output format: xml, json, markdown")
 	scanCmd.Flags().StringVarP(&outputFile, "output", "o", "", "Output file (default: auto-generated)")
 	scanCmd.Flags().BoolVar(&includeSummary, "include-summary", true, "Include file summary section")
@@ -86,10 +90,180 @@ func init() {
 		[]string{".go", ".js", ".ts", ".jsx", ".tsx", ".json", ".md", ".html", ".css", ".py", ".java", ".cpp", ".c", ".h", ".rs", ".rb", ".php", ".yml", ".yaml", ".toml", ".xml"},
 		"File extensions to include")
 
-	// NEW: Progress and error handling flags
+	// Progress and error handling flags
 	scanCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed progress information")
 	scanCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress output")
 	scanCmd.Flags().BoolVar(&strictMode, "strict", false, "Fail immediately on any error")
+
+	// NEW: Config file flag
+	scanCmd.Flags().StringVar(&configFile, "config", "",
+		"Path to .codeecho.yaml or .codeecho.json config file")
+}
+
+// NEW: Track which CLI flags were explicitly set
+// Why: Distinguish between "user didn't set flag" vs "flag has default value"
+// This allows config file to provide defaults while CLI overrides them
+func getCliOverrides(cmd *cobra.Command) map[string]bool {
+	overrides := make(map[string]bool)
+
+	// Check which flags were explicitly set by user
+	// We only check the important ones that might conflict with config
+	if cmd.Flags().Changed("format") {
+		overrides["format"] = true
+	}
+	if cmd.Flags().Changed("exclude-dirs") {
+		overrides["exclude-dirs"] = true
+	}
+	if cmd.Flags().Changed("include-exts") {
+		overrides["include-exts"] = true
+	}
+	if cmd.Flags().Changed("content") {
+		overrides["include-content"] = true
+	}
+	if cmd.Flags().Changed("no-content") {
+		overrides["no-content"] = true
+	}
+	if cmd.Flags().Changed("include-summary") {
+		overrides["include-summary"] = true
+	}
+	if cmd.Flags().Changed("include-tree") {
+		overrides["include-tree"] = true
+	}
+	if cmd.Flags().Changed("line-numbers") {
+		overrides["show-line-numbers"] = true
+	}
+	if cmd.Flags().Changed("compress-code") {
+		overrides["compress-code"] = true
+	}
+	if cmd.Flags().Changed("remove-comments") {
+		overrides["remove-comments"] = true
+	}
+	if cmd.Flags().Changed("remove-empty-lines") {
+		overrides["remove-empty-lines"] = true
+	}
+
+	return overrides
+}
+
+// NEW: Load and merge configuration
+// Why: Centralize config logic, make it testable
+func loadAndMergeConfig(targetPath string, cmd *cobra.Command) error {
+	// Step 1: Determine which config file to load
+	var configPath string
+	var err error
+
+	if configFile != "" {
+		// User specified explicit config file
+		configPath = configFile
+	} else {
+		// Auto-discover config file starting from targetPath
+		configPath, err = config.FindConfigFile(targetPath)
+		if err != nil {
+			return fmt.Errorf("failed to search for config file: %w", err)
+		}
+	}
+
+	// If no config found, that's OK - just use CLI flags
+	if configPath == "" {
+		if !quiet {
+			// Mention that config could be used (informative, not an error)
+			// Actually, don't spam - only show if verbose
+			if verbose {
+				fmt.Println("No .codeecho.yaml or .codeecho.json found, using CLI defaults")
+			}
+		}
+		return nil
+	}
+
+	// Step 2: Load the config file
+	if !quiet {
+		fmt.Printf("⚙️  Loading config from %s\n", configPath)
+	}
+
+	cfg, err := config.LoadConfigFile(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to load config file: %w", err)
+	}
+
+	// Step 3: Determine which flags were explicitly set on CLI
+	// This is crucial for proper precedence
+	cliOverrides := getCliOverrides(cmd)
+
+	// Step 4: Merge config into our current flag values
+	// Why: Apply config defaults, but respect CLI overrides
+	mergeConfigIntoFlags(cfg, cliOverrides)
+
+	if !quiet && verbose {
+		fmt.Println("✓ Config merged successfully (CLI flags take precedence)")
+	}
+
+	return nil
+}
+
+// NEW: Merge config file values into global flag variables
+// Why: Modify the actual flags so rest of code sees merged values
+func mergeConfigIntoFlags(cfg *config.ConfigFile, cliOverrides map[string]bool) {
+	// Format: handled separately in runScan
+	if !cliOverrides["format"] && cfg.Format != "" {
+		outputFormat = cfg.Format
+	}
+
+	// Exclude dirs: merge if not overridden
+	if !cliOverrides["exclude-dirs"] && len(cfg.ExcludeDirs) > 0 {
+		excludeDirs = cfg.ExcludeDirs
+	}
+
+	// Include exts: merge if not overridden
+	if !cliOverrides["include-exts"] && len(cfg.IncludeExts) > 0 {
+		includeExts = cfg.IncludeExts
+	}
+
+	// Include content: respect config if not explicitly set
+	if !cliOverrides["content"] && !cliOverrides["no-content"] {
+		includeContent = cfg.IncludeContent
+	}
+
+	// Include summary
+	if !cliOverrides["include-summary"] {
+		includeSummary = cfg.IncludeSummary
+	}
+
+	// Include tree
+	if !cliOverrides["include-tree"] {
+		includeDirectoryTree = cfg.IncludeTree
+	}
+
+	// Show line numbers
+	if !cliOverrides["show-line-numbers"] && cfg.ShowLineNumbers {
+		showLineNumbers = cfg.ShowLineNumbers
+	}
+
+	// Processing options
+	if !cliOverrides["compress-code"] && cfg.CompressCode {
+		compressCode = cfg.CompressCode
+	}
+
+	if !cliOverrides["remove-comments"] && cfg.RemoveComments {
+		removeComments = cfg.RemoveComments
+	}
+
+	if !cliOverrides["remove-empty-lines"] && cfg.RemoveEmptyLines {
+		removeEmptyLines = cfg.RemoveEmptyLines
+	}
+
+	// Output file
+	if outputFile == "" && cfg.Output != "" {
+		outputFile = cfg.Output
+	}
+
+	// Progress flags
+	if !cliOverrides["verbose"] && cfg.OutputVerbose {
+		verbose = cfg.OutputVerbose
+	}
+
+	if !cliOverrides["quiet"] && cfg.OutputQuiet {
+		quiet = cfg.OutputQuiet
+	}
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -110,6 +284,18 @@ func runScan(cmd *cobra.Command, args []string) error {
 	absPath, err := filepath.Abs(targetPath)
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path: %w", err)
+	}
+
+	// NEW: Load config before proceeding with scan
+	// Why: Do this early so all subsequent operations use merged config
+	if err := loadAndMergeConfig(absPath, cmd); err != nil {
+		// Config errors should be shown but not fatal (unless we want strict mode)
+		if strictMode {
+			return err
+		}
+		if !quiet {
+			fmt.Printf("Warning: %v\n", err)
+		}
 	}
 
 	if !quiet {
