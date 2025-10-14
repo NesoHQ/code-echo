@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/opskraken/codeecho-cli/config"
-	"github.com/opskraken/codeecho-cli/scanner"
+	"github.com/NesoHQ/code-echo/codeecho-cli/scanner"
+	"github.com/NesoHQ/code-echo/codeecho-cli/types"
 )
-
 
 type StreamingWriter interface {
 	WriteHeader(repoPath string, scanTime string) error
@@ -19,7 +18,7 @@ type StreamingWriter interface {
 
 // NewStreamingWriter creates the appropriate writer based on format
 // Factory pattern - returns different implementations of same interface
-func NewStreamingWriter(w io.Writer, format string, opts config.OutputOptions) (StreamingWriter, error) {
+func NewStreamingWriter(w io.Writer, format string, opts types.OutputOptions) (StreamingWriter, error) {
 	switch format {
 	case "xml":
 		return NewStreamingXMLWriter(w, opts), nil

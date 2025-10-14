@@ -6,18 +6,18 @@ import (
 	"io"
 	"strings"
 
-	"github.com/opskraken/codeecho-cli/config"
-	"github.com/opskraken/codeecho-cli/scanner"
-	"github.com/opskraken/codeecho-cli/utils"
+	"github.com/NesoHQ/code-echo/codeecho-cli/types"
+	"github.com/NesoHQ/code-echo/codeecho-cli/scanner"
+	"github.com/NesoHQ/code-echo/codeecho-cli/utils"
 )
 
 type StreamingMarkdownWriter struct {
 	writer *bufio.Writer
-	opts   config.OutputOptions
+	opts   types.OutputOptions
 	stats  *scanner.StreamingStats
 }
 
-func NewStreamingMarkdownWriter(w io.Writer, opts config.OutputOptions) *StreamingMarkdownWriter {
+func NewStreamingMarkdownWriter(w io.Writer, opts types.OutputOptions) *StreamingMarkdownWriter {
 	return &StreamingMarkdownWriter{
 		writer: bufio.NewWriterSize(w, 65536),
 		opts:   opts,

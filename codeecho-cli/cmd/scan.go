@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/opskraken/codeecho-cli/config"
-	"github.com/opskraken/codeecho-cli/output"
-	"github.com/opskraken/codeecho-cli/scanner"
-	"github.com/opskraken/codeecho-cli/utils"
+	"github.com/NesoHQ/code-echo/codeecho-cli/output"
+	"github.com/NesoHQ/code-echo/codeecho-cli/scanner"
+	"github.com/NesoHQ/code-echo/codeecho-cli/types"
+	"github.com/NesoHQ/code-echo/codeecho-cli/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -140,7 +140,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if outputFile != "" {
 		outputFilePath = outputFile
 	} else {
-		outputOpts := config.OutputOptions{
+		outputOpts := types.OutputOptions{
 			IncludeSummary:       includeSummary,
 			IncludeDirectoryTree: includeDirectoryTree,
 			ShowLineNumbers:      showLineNumbers,
@@ -160,7 +160,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	defer outFile.Close()
 
 	// Create output options
-	outputOpts := config.OutputOptions{
+	outputOpts := types.OutputOptions{
 		IncludeSummary:       includeSummary,
 		IncludeDirectoryTree: includeDirectoryTree,
 		ShowLineNumbers:      showLineNumbers,

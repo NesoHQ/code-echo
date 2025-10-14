@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/opskraken/codeecho-cli/config"
+	"github.com/NesoHQ/code-echo/codeecho-cli/types"
 )
 
 func GetRelativePath(root, path string) string {
@@ -16,7 +16,7 @@ func GetRelativePath(root, path string) string {
 	return rel
 }
 
-func GenerateAutoFilename(repoPath, format string, opts config.OutputOptions) string {
+func GenerateAutoFilename(repoPath, format string, opts types.OutputOptions) string {
 	// Get project name
 	projectName := filepath.Base(repoPath)
 	if projectName == "." || projectName == "/" {

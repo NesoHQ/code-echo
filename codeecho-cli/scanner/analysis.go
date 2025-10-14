@@ -7,7 +7,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/opskraken/codeecho-cli/utils"
+	"github.com/NesoHQ/code-echo/codeecho-cli/utils"
 )
 
 type AnalysisScanner struct {

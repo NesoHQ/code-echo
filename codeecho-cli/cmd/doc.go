@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/opskraken/codeecho-cli/output"
-	"github.com/opskraken/codeecho-cli/scanner"
-	"github.com/opskraken/codeecho-cli/utils"
+	"github.com/NesoHQ/code-echo/codeecho-cli/output"
+	"github.com/NesoHQ/code-echo/codeecho-cli/scanner"
+	"github.com/NesoHQ/code-echo/codeecho-cli/utils"
 	"github.com/spf13/cobra"
 )
 

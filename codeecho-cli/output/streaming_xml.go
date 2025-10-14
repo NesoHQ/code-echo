@@ -6,20 +6,20 @@ import (
 	"io"
 	"strings"
 
-	"github.com/opskraken/codeecho-cli/config"
-	"github.com/opskraken/codeecho-cli/scanner"
-	"github.com/opskraken/codeecho-cli/utils"
+	"github.com/NesoHQ/code-echo/codeecho-cli/scanner"
+	"github.com/NesoHQ/code-echo/codeecho-cli/types"
+	"github.com/NesoHQ/code-echo/codeecho-cli/utils"
 )
 
 // StreamingXMLWriter writes XML output incrementally
 type StreamingXMLWriter struct {
 	writer *bufio.Writer // Buffered writer for performance (batches small writes)
-	opts   config.OutputOptions
+	opts   types.OutputOptions
 	stats  *scanner.StreamingStats // Track stats as we go
 }
 
 // NewStreamingXMLWriter creates a new streaming XML writer
-func NewStreamingXMLWriter(w io.Writer, opts config.OutputOptions) *StreamingXMLWriter {
+func NewStreamingXMLWriter(w io.Writer, opts types.OutputOptions) *StreamingXMLWriter {
 	return &StreamingXMLWriter{
 		writer: bufio.NewWriterSize(w, 65536), // 64KB buffer for efficiency
 		opts:   opts,

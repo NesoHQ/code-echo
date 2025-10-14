@@ -1,6 +1,6 @@
 package main
 
-import "github.com/opskraken/codeecho-cli/cmd"
+import "github.com/NesoHQ/code-echo/codeecho-cli/cmd"
 
 func main() {
 	cmd.Execute()

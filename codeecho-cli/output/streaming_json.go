@@ -6,20 +6,20 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/opskraken/codeecho-cli/config"
-	"github.com/opskraken/codeecho-cli/scanner"
-	"github.com/opskraken/codeecho-cli/utils"
+	"github.com/NesoHQ/code-echo/codeecho-cli/types"
+	"github.com/NesoHQ/code-echo/codeecho-cli/scanner"
+	"github.com/NesoHQ/code-echo/codeecho-cli/utils"
 )
 
 // StreamingJSONWriter writes JSON output incrementally
 type StreamingJSONWriter struct {
 	writer    *bufio.Writer
-	opts      config.OutputOptions
+	opts      types.OutputOptions
 	stats     *scanner.StreamingStats
 	firstFile bool // Track if this is the first file (for comma handling)
 }
 
-func NewStreamingJSONWriter(w io.Writer, opts config.OutputOptions) *StreamingJSONWriter {
+func NewStreamingJSONWriter(w io.Writer, opts types.OutputOptions) *StreamingJSONWriter {
 	return &StreamingJSONWriter{
 		writer: bufio.NewWriterSize(w, 65536),
 		opts:   opts,

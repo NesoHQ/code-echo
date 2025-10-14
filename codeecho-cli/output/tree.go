@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/opskraken/codeecho-cli/scanner"
+	"github.com/NesoHQ/code-echo/codeecho-cli/scanner"
 )
 
 func GenerateDirectoryTree(files []scanner.FileInfo) string {
