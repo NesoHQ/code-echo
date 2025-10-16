@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/NesoHQ/code-echo/codeecho-cli/types"
 	"github.com/NesoHQ/code-echo/codeecho-cli/scanner"
+	"github.com/NesoHQ/code-echo/codeecho-cli/types"
 	"github.com/NesoHQ/code-echo/codeecho-cli/utils"
 )
 
@@ -40,10 +40,44 @@ func (w *StreamingJSONWriter) WriteHeader(repoPath string, scanTime string) erro
 	repoInfo := fmt.Sprintf(`  "repo_path": %s,
   "scan_time": %s,
   "processed_by": "CodeEcho CLI",
-  "files": [
 `, jsonString(repoPath), jsonString(scanTime))
 
 	if _, err := w.writer.WriteString(repoInfo); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (w *StreamingJSONWriter) WriteGitMetadata(git *scanner.GitMetadata) error {
+	if git == nil {
+		// Continue without git section
+		if _, err := w.writer.WriteString(`  "files": [
+`); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Write git metadata as JSON
+	gitJSON, err := json.MarshalIndent(git, "  ", "  ")
+	if err != nil {
+		return err
+	}
+
+	if _, err := w.writer.WriteString(`  "git": `); err != nil {
+		return err
+	}
+	if _, err := w.writer.Write(gitJSON); err != nil {
+		return err
+	}
+	if _, err := w.writer.WriteString(",\n"); err != nil {
+		return err
+	}
+
+	// Start files array
+	if _, err := w.writer.WriteString(`  "files": [
+`); err != nil {
 		return err
 	}
 

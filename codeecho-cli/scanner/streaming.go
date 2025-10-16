@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/NesoHQ/code-echo/codeecho-cli/utils"
+	ignore "github.com/sabhiram/go-gitignore"
 )
 
 type StreamingScanner struct {
@@ -25,6 +26,9 @@ type StreamingScanner struct {
 
 	// NEW: Timing
 	startTime time.Time
+
+	gitignore *ignore.GitIgnore
+	gitMeta   *GitMetadata
 }
 
 // StreamingStats tracks lightweight counters (not full file data)
@@ -38,7 +42,7 @@ type StreamingStats struct {
 
 // NewStreamingScanner creates a scanner that calls fileHandler for each file
 func NewStreamingScanner(rootPath string, opts ScanOptions, fileHandler func(*FileInfo) error) *StreamingScanner {
-	return &StreamingScanner{
+	scanner := &StreamingScanner{
 		rootPath:    rootPath,
 		opts:        opts,
 		fileHandler: fileHandler,
@@ -46,8 +50,14 @@ func NewStreamingScanner(rootPath string, opts ScanOptions, fileHandler func(*Fi
 			LanguageCounts: make(map[string]int),
 		},
 		filePaths: []string{},
-		errors:    []ScanError{}, // Initialize error slice
+		errors:    []ScanError{},
 	}
+	if opts.GitAware {
+		scanner.gitignore = LoadGitignorePatterns(rootPath)
+		scanner.gitMeta = LoadGitMetadata(rootPath)
+	}
+
+	return scanner
 }
 
 // NEW: Set progress callback
@@ -126,6 +136,17 @@ func (s *StreamingScanner) collectPaths() error {
 			return filepath.SkipDir
 		}
 
+		// NEW: Check .gitignore if enabled
+		if s.opts.GitAware && s.gitignore != nil {
+			relativePath := utils.GetRelativePath(s.rootPath, path)
+			if IsIgnoredByGitignore(relativePath, s.gitignore) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
+
 		// Collect file paths only
 		if !d.IsDir() && shouldIncludeFile(path, s.opts.IncludeExts) {
 			relativePath := utils.GetRelativePath(s.rootPath, path)
@@ -169,6 +190,17 @@ func (s *StreamingScanner) Scan() (*StreamingStats, error) {
 		// Skip excluded directories
 		if d.IsDir() && shouldExcludeDir(d.Name(), s.opts.ExcludeDirs) {
 			return filepath.SkipDir
+		}
+
+		// NEW: Check .gitignore if enabled
+		if s.opts.GitAware && s.gitignore != nil {
+			relativePath := utils.GetRelativePath(s.rootPath, path)
+			if IsIgnoredByGitignore(relativePath, s.gitignore) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 		}
 
 		// Process files only
@@ -256,4 +288,8 @@ func (s *StreamingScanner) processFile(path string, d fs.DirEntry) error {
 	}
 
 	return nil
+}
+
+func (s *StreamingScanner) GetGitMetadata() *GitMetadata {
+	return s.gitMeta
 }

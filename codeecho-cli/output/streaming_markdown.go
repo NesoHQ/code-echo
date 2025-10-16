@@ -6,8 +6,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/NesoHQ/code-echo/codeecho-cli/types"
 	"github.com/NesoHQ/code-echo/codeecho-cli/scanner"
+	"github.com/NesoHQ/code-echo/codeecho-cli/types"
 	"github.com/NesoHQ/code-echo/codeecho-cli/utils"
 )
 
@@ -33,11 +33,60 @@ func (w *StreamingMarkdownWriter) WriteHeader(repoPath string, scanTime string) 
 **Repository:** %s
 **Scan Time:** %s
 
-## Files
-
 `, repoPath, scanTime)
 
 	if _, err := w.writer.WriteString(header); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (w *StreamingMarkdownWriter) WriteGitMetadata(git *scanner.GitMetadata) error {
+	if git == nil {
+		// Continue to files section
+		if _, err := w.writer.WriteString("## Files\n\n"); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Write Git information section
+	if _, err := w.writer.WriteString("## Git Information\n\n"); err != nil {
+		return err
+	}
+
+	if git.Branch != "" {
+		if _, err := w.writer.WriteString(fmt.Sprintf("**Branch:** %s\n", git.Branch)); err != nil {
+			return err
+		}
+	}
+
+	if git.CommitHash != "" {
+		if _, err := w.writer.WriteString(fmt.Sprintf("**Commit:** %s\n", git.CommitHash)); err != nil {
+			return err
+		}
+	}
+
+	if git.Author != "" {
+		if _, err := w.writer.WriteString(fmt.Sprintf("**Author:** %s\n", git.Author)); err != nil {
+			return err
+		}
+	}
+
+	if git.CommitDate != "" {
+		if _, err := w.writer.WriteString(fmt.Sprintf("**Date:** %s\n", git.CommitDate)); err != nil {
+			return err
+		}
+	}
+
+	if git.CommitCount > 0 {
+		if _, err := w.writer.WriteString(fmt.Sprintf("**Total Commits:** %d\n", git.CommitCount)); err != nil {
+			return err
+		}
+	}
+
+	if _, err := w.writer.WriteString("\n## Files\n\n"); err != nil {
 		return err
 	}
 

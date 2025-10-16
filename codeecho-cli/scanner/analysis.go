@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/NesoHQ/code-echo/codeecho-cli/utils"
+	ignore "github.com/sabhiram/go-gitignore"
 )
 
 type AnalysisScanner struct {
@@ -18,14 +19,22 @@ type AnalysisScanner struct {
 	progressCallback ProgressCallback
 	errors           []ScanError
 	startTime        time.Time
+
+	gitignore *ignore.GitIgnore
+	gitMeta   *GitMetadata
 }
 
 func NewAnalysisScanner(rootPath string, opts ScanOptions) *AnalysisScanner {
-	return &AnalysisScanner{
+	scanner := &AnalysisScanner{
 		rootPath: rootPath,
 		opts:     opts,
 		errors:   []ScanError{},
 	}
+	if opts.GitAware {
+		scanner.gitignore = LoadGitignorePatterns(rootPath)
+		scanner.gitMeta = LoadGitMetadata(rootPath)
+	}
+	return scanner
 }
 
 // NEW: Set progress callback
@@ -79,6 +88,7 @@ func (a *AnalysisScanner) Scan() (*ScanResult, error) {
 		Files:          []FileInfo{},
 		ProcessedBy:    "CodeEcho CLI",
 		LanguageCounts: make(map[string]int),
+		Git:            a.gitMeta,
 	}
 
 	// First pass: Count total files
@@ -88,10 +98,21 @@ func (a *AnalysisScanner) Scan() (*ScanResult, error) {
 		if err != nil {
 			return nil
 		}
-		if !d.IsDir() && shouldIncludeFile(path, a.opts.IncludeExts) {
-			if d.IsDir() && shouldExcludeDir(d.Name(), a.opts.ExcludeDirs) {
-				return filepath.SkipDir
+		// Skip excluded directories
+		if d.IsDir() && shouldExcludeDir(d.Name(), a.opts.ExcludeDirs) {
+			return filepath.SkipDir
+		}
+		// Check .gitignore if enabled
+		if a.opts.GitAware && a.gitignore != nil {
+			relativePath := utils.GetRelativePath(a.rootPath, path)
+			if IsIgnoredByGitignore(relativePath, a.gitignore) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
 			}
+		}
+		if !d.IsDir() && shouldIncludeFile(path, a.opts.IncludeExts) {
 			totalFiles++
 		}
 		return nil
@@ -109,7 +130,16 @@ func (a *AnalysisScanner) Scan() (*ScanResult, error) {
 		if d.IsDir() && shouldExcludeDir(d.Name(), a.opts.ExcludeDirs) {
 			return filepath.SkipDir
 		}
-
+		// Check .gitignore if enabled
+		if a.opts.GitAware && a.gitignore != nil {
+			relativePath := utils.GetRelativePath(a.rootPath, path)
+			if IsIgnoredByGitignore(relativePath, a.gitignore) {
+				if d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
 		// Process files only
 		if !d.IsDir() && shouldIncludeFile(path, a.opts.IncludeExts) {
 			relativePath := utils.GetRelativePath(a.rootPath, path)

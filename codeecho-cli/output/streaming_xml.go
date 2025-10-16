@@ -122,13 +122,64 @@ The content is organized as follows:
 		}
 	}
 
-	// Repository info (will update stats in footer)
-	if _, err := w.writer.WriteString(fmt.Sprintf("<repository_info>\n<repo_path>%s</repo_path>\n<scan_time>%s</scan_time>\n</repository_info>\n\n", escapeXML(repoPath), scanTime)); err != nil {
+	// CHANGED: Start repository_metadata (will be closed by WriteGitMetadata)
+	if _, err := w.writer.WriteString("<repository_metadata>\n"); err != nil {
+		return err
+	}
+	if _, err := w.writer.WriteString(fmt.Sprintf("<repo_path>%s</repo_path>\n", escapeXML(repoPath))); err != nil {
+		return err
+	}
+	if _, err := w.writer.WriteString(fmt.Sprintf("<scan_time>%s</scan_time>\n", scanTime)); err != nil {
 		return err
 	}
 
-	// Start files section
-	if _, err := w.writer.WriteString("<files>\nThis section contains the contents of the repository's files.\n\n"); err != nil {
+	return nil
+}
+
+// WriteGitMetadata writes Git repository metadata
+func (w *StreamingXMLWriter) WriteGitMetadata(git *scanner.GitMetadata) error {
+	if git != nil {
+		if _, err := w.writer.WriteString("<git>\n"); err != nil {
+			return err
+		}
+
+		if git.Branch != "" {
+			if _, err := w.writer.WriteString(fmt.Sprintf("  <branch>%s</branch>\n", escapeXML(git.Branch))); err != nil {
+				return err
+			}
+		}
+
+		if git.CommitHash != "" {
+			if _, err := w.writer.WriteString(fmt.Sprintf("  <commit_hash>%s</commit_hash>\n", escapeXML(git.CommitHash))); err != nil {
+				return err
+			}
+		}
+
+		if git.Author != "" {
+			if _, err := w.writer.WriteString(fmt.Sprintf("  <author>%s</author>\n", escapeXML(git.Author))); err != nil {
+				return err
+			}
+		}
+
+		if git.CommitDate != "" {
+			if _, err := w.writer.WriteString(fmt.Sprintf("  <commit_date>%s</commit_date>\n", escapeXML(git.CommitDate))); err != nil {
+				return err
+			}
+		}
+
+		if git.CommitCount > 0 {
+			if _, err := w.writer.WriteString(fmt.Sprintf("  <commit_count>%d</commit_count>\n", git.CommitCount)); err != nil {
+				return err
+			}
+		}
+
+		if _, err := w.writer.WriteString("</git>\n"); err != nil {
+			return err
+		}
+	}
+
+	// Close repository_metadata tag
+	if _, err := w.writer.WriteString("</repository_metadata>\n\n"); err != nil {
 		return err
 	}
 
@@ -137,6 +188,10 @@ The content is organized as follows:
 
 func (w *StreamingXMLWriter) WriteTree(paths []string) error {
 	if !w.opts.IncludeDirectoryTree || len(paths) == 0 {
+		// Start files section even if no tree
+		if _, err := w.writer.WriteString("<files>\nThis section contains the contents of the repository's files.\n\n"); err != nil {
+			return err
+		}
 		return nil
 	}
 
@@ -155,6 +210,11 @@ func (w *StreamingXMLWriter) WriteTree(paths []string) error {
 		return err
 	}
 	if _, err := w.writer.WriteString("</directory_structure>\n\n"); err != nil {
+		return err
+	}
+
+	// Start files section
+	if _, err := w.writer.WriteString("<files>\nThis section contains the contents of the repository's files.\n\n"); err != nil {
 		return err
 	}
 

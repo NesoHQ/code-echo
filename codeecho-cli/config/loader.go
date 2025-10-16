@@ -30,7 +30,8 @@ type ConfigFile struct {
 	OutputVerbose bool   `yaml:"verbose" json:"verbose"`
 
 	// Presets (for future use)
-	Preset string `yaml:"preset" json:"preset"`
+	Preset   string `yaml:"preset" json:"preset"`
+	GitAware bool   `yaml:"gitAware" json:"gitAware"`
 }
 
 // FindConfigFile looks for .codeecho.yaml or .codeecho.json in the current directory
@@ -125,8 +126,7 @@ func LoadConfigFile(filePath string) (*ConfigFile, error) {
 // ApplyConfigToOptions merges ConfigFile values into ScanOptions
 // Implements precedence: CLI flags > config file > defaults
 // Why: Users can override config with flags
-func ApplyConfigToOptions(configFile *ConfigFile, opts *scanner.ScanOptions,
-	cliOverrides map[string]bool) {
+func ApplyConfigToOptions(configFile *ConfigFile, opts *scanner.ScanOptions, cliOverrides map[string]bool) {
 
 	if configFile == nil {
 		return
@@ -186,6 +186,9 @@ func CreateDefaultConfigFile() string {
 
 # Output format: xml, json, or markdown
 format: xml
+
+# Git awareness - respects .gitignore and captures repo metadata
+gitAware: true
 
 # File filtering
 exclude_dirs:

@@ -24,6 +24,7 @@ type ScanResult struct {
 	TextFiles      int            `json:"text_files"`
 	BinaryFiles    int            `json:"binary_files"`
 	LanguageCounts map[string]int `json:"language_counts"`
+	Git            *GitMetadata   `json:"git,omitempty"`
 }
 
 type ScanOptions struct {
@@ -39,6 +40,7 @@ type ScanOptions struct {
 	ExcludeDirs    []string
 	IncludeExts    []string
 	IncludeContent bool
+	GitAware       bool
 }
 
 // Progress tracking

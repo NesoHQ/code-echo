@@ -10,6 +10,7 @@ import (
 
 type StreamingWriter interface {
 	WriteHeader(repoPath string, scanTime string) error
+	WriteGitMetadata(git *scanner.GitMetadata) error
 	WriteTree(paths []string) error
 	WriteFile(file *scanner.FileInfo) error
 	WriteFooter(stats *scanner.StreamingStats) error

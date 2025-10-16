@@ -3,6 +3,7 @@ module github.com/NesoHQ/code-echo/codeecho-cli
 go 1.25.1
 
 require (
+	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/spf13/cobra v1.10.1
 	gopkg.in/yaml.v3 v3.0.1
 )

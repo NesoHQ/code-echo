@@ -32,13 +32,13 @@ var (
 	includeContent bool
 	excludeContent bool
 
-	// NEW: Progress and error flags
-	verbose    bool // Show detailed progress
-	quiet      bool // Suppress progress output
-	strictMode bool // Fail on any error
+	verbose    bool
+	quiet      bool
+	strictMode bool
 
-	// NEW: Config file flag
 	configFile string
+	gitAware   bool
+	noGitAware bool
 )
 
 var scanCmd = &cobra.Command{
@@ -96,8 +96,10 @@ func init() {
 	scanCmd.Flags().BoolVar(&strictMode, "strict", false, "Fail immediately on any error")
 
 	// NEW: Config file flag
-	scanCmd.Flags().StringVar(&configFile, "config", "",
-		"Path to .codeecho.yaml or .codeecho.json config file")
+	scanCmd.Flags().StringVar(&configFile, "config", "", "Path to .codeecho.yaml or .codeecho.json config file")
+
+	scanCmd.Flags().BoolVar(&gitAware, "git-aware", true, "Enable git-aware scanning")
+	scanCmd.Flags().BoolVar(&noGitAware, "no-git-aware", false, "Disable git integration")
 }
 
 // NEW: Track which CLI flags were explicitly set
@@ -264,6 +266,11 @@ func mergeConfigIntoFlags(cfg *config.ConfigFile, cliOverrides map[string]bool) 
 	if !cliOverrides["quiet"] && cfg.OutputQuiet {
 		quiet = cfg.OutputQuiet
 	}
+
+	// Git awareness
+	if !cliOverrides["git-aware"] && !cliOverrides["no-git-aware"] {
+		gitAware = cfg.GitAware
+	}
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -298,8 +305,15 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if noGitAware {
+		gitAware = false
+	}
+
 	if !quiet {
 		fmt.Printf("🔍 Scanning repository at %s...\n", absPath)
+		if gitAware {
+			fmt.Println("⚙️  Git-aware mode enabled")
+		}
 	}
 
 	if excludeContent {
@@ -381,11 +395,29 @@ func runScan(cmd *cobra.Command, args []string) error {
 		ExcludeDirs:          excludeDirs,
 		IncludeExts:          includeExts,
 		IncludeContent:       includeContent,
+		GitAware:             gitAware,
 	}
 
 	streamingScanner := scanner.NewStreamingScanner(absPath, scanOpts, writer.WriteFile)
 	streamingScanner.SetTreeWriter(writer.WriteTree)
+	// Get and display git info if available
+	gitMeta := streamingScanner.GetGitMetadata()
+	if gitAware && !quiet {
+		if gitMeta != nil {
+			fmt.Printf("✔ Detected Git branch: %s (%d commits)\n", gitMeta.Branch, gitMeta.CommitCount)
+		}
 
+		// Check for .gitignore
+		gitignorePath := filepath.Join(absPath, ".gitignore")
+		if _, err := os.Stat(gitignorePath); err == nil {
+			fmt.Println("✔ Loaded .gitignore rules")
+		}
+	}
+
+	// Write Git metadata to output
+	if err := writer.WriteGitMetadata(gitMeta); err != nil {
+		return fmt.Errorf("failed to write git metadata: %w", err)
+	}
 	// NEW: Setup progress tracking
 	if !quiet {
 		streamingScanner.SetProgressCallback(createProgressDisplay(verbose))
