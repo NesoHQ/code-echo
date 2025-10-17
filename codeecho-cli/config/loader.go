@@ -232,3 +232,33 @@ verbose: false
 # preset: "ai-optimized"  # minimal, comprehensive, ai-optimized, documentation
 `
 }
+
+// Validate checks if the configuration values are valid
+func (c *ConfigFile) Validate() error {
+	// Validate format
+	if c.Format != "" {
+		validFormats := map[string]bool{"xml": true, "json": true, "markdown": true, "md": true}
+		if !validFormats[c.Format] {
+			return fmt.Errorf("invalid format '%s': must be xml, json, or markdown", c.Format)
+		}
+	}
+
+	// Validate output path if specified
+	if c.Output != "" {
+		dir := filepath.Dir(c.Output)
+		if dir != "." && dir != "" {
+			if info, err := os.Stat(dir); err != nil {
+				return fmt.Errorf("output directory does not exist: %s", dir)
+			} else if !info.IsDir() {
+				return fmt.Errorf("output path parent is not a directory: %s", dir)
+			}
+		}
+	}
+
+	// Check for conflicting flags
+	if c.OutputQuiet && c.OutputVerbose {
+		return fmt.Errorf("cannot use both quiet and verbose modes")
+	}
+
+	return nil
+}

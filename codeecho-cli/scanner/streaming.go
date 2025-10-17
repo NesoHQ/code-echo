@@ -52,9 +52,35 @@ func NewStreamingScanner(rootPath string, opts ScanOptions, fileHandler func(*Fi
 		filePaths: []string{},
 		errors:    []ScanError{},
 	}
+
+	// Load Git information if git-aware mode is enabled
 	if opts.GitAware {
-		scanner.gitignore = LoadGitignorePatterns(rootPath)
-		scanner.gitMeta = LoadGitMetadata(rootPath)
+		// Load .gitignore patterns
+		gitignore, err := LoadGitignorePatterns(rootPath)
+		if err != nil {
+			// Record error but continue - .gitignore is optional
+			scanner.errors = append(scanner.errors, ScanError{
+				Path:    filepath.Join(rootPath, ".gitignore"),
+				Phase:   "gitignore",
+				Error:   err,
+				Skipped: false,
+			})
+		}
+		scanner.gitignore = gitignore
+
+		// Load Git metadata
+		gitMeta, gitErrors := LoadGitMetadata(rootPath)
+		scanner.gitMeta = gitMeta
+
+		// Record any git metadata errors (but don't fail)
+		for _, err := range gitErrors {
+			scanner.errors = append(scanner.errors, ScanError{
+				Path:    rootPath,
+				Phase:   "git-metadata",
+				Error:   err,
+				Skipped: false,
+			})
+		}
 	}
 
 	return scanner
@@ -292,4 +318,8 @@ func (s *StreamingScanner) processFile(path string, d fs.DirEntry) error {
 
 func (s *StreamingScanner) GetGitMetadata() *GitMetadata {
 	return s.gitMeta
+}
+
+func SetGitTimeout(timeout time.Duration) {
+	GitCommandTimeout = timeout
 }

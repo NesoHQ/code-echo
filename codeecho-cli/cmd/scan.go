@@ -39,6 +39,7 @@ var (
 	configFile string
 	gitAware   bool
 	noGitAware bool
+	gitTimeout int
 )
 
 var scanCmd = &cobra.Command{
@@ -100,6 +101,7 @@ func init() {
 
 	scanCmd.Flags().BoolVar(&gitAware, "git-aware", true, "Enable git-aware scanning")
 	scanCmd.Flags().BoolVar(&noGitAware, "no-git-aware", false, "Disable git integration")
+	scanCmd.Flags().IntVar(&gitTimeout, "git-timeout", 5, "Timeout for git commands in seconds")
 }
 
 // NEW: Track which CLI flags were explicitly set
@@ -185,6 +187,11 @@ func loadAndMergeConfig(targetPath string, cmd *cobra.Command) error {
 	cfg, err := config.LoadConfigFile(configPath)
 	if err != nil {
 		return fmt.Errorf("failed to load config file: %w", err)
+	}
+
+	// Validate config
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	// Step 3: Determine which flags were explicitly set on CLI
@@ -309,6 +316,11 @@ func runScan(cmd *cobra.Command, args []string) error {
 		gitAware = false
 	}
 
+	// Set git timeout if specified
+	if gitTimeout > 0 && gitTimeout != 5 {
+		scanner.SetGitTimeout(time.Duration(gitTimeout) * time.Second)
+	}
+
 	if !quiet {
 		fmt.Printf("🔍 Scanning repository at %s...\n", absPath)
 		if gitAware {
@@ -404,13 +416,28 @@ func runScan(cmd *cobra.Command, args []string) error {
 	gitMeta := streamingScanner.GetGitMetadata()
 	if gitAware && !quiet {
 		if gitMeta != nil {
-			fmt.Printf("✔ Detected Git branch: %s (%d commits)\n", gitMeta.Branch, gitMeta.CommitCount)
+			commitCountStr := fmt.Sprintf("%d commits", gitMeta.CommitCount)
+			if gitMeta.CommitCount == -1 {
+				commitCountStr = "shallow clone"
+			}
+			fmt.Printf("✔ Detected Git branch: %s (%s)\n", gitMeta.Branch, commitCountStr)
 		}
 
 		// Check for .gitignore
 		gitignorePath := filepath.Join(absPath, ".gitignore")
 		if _, err := os.Stat(gitignorePath); err == nil {
 			fmt.Println("✔ Loaded .gitignore rules")
+		}
+
+		// Show Git-related warnings if any
+		gitErrors := 0
+		for _, scanErr := range streamingScanner.GetErrors() {
+			if scanErr.Phase == "git-metadata" || scanErr.Phase == "gitignore" {
+				gitErrors++
+			}
+		}
+		if gitErrors > 0 && verbose {
+			fmt.Printf("⚠️  %d Git-related warnings (use --verbose for details)\n", gitErrors)
 		}
 	}
 

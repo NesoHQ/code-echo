@@ -13,6 +13,7 @@ Transform your entire codebase into structured formats (XML, JSON, or Markdown) 
 - **Repository Scanning**: Extract file structure and content from any directory
 - **Multiple Output Formats**: XML, JSON, and Markdown support
 - **Streaming Architecture**: Process large repositories efficiently without loading everything into memory
+- **Git Awareness**: Automatically respects `.gitignore` and captures Git metadata (branch, commits, author)
 - **File Processing**: Remove comments, compress code, strip empty lines
 - **Smart Filtering**: Include/exclude files and directories based on patterns
 - **Progress Tracking**: Real-time feedback with verbose and quiet modes
@@ -103,6 +104,14 @@ codeecho scan [path] [flags]
 | `--remove-comments`    | bool | `false` | Strip comments from source files |
 | `--remove-empty-lines` | bool | `false` | Remove blank lines               |
 
+#### Git Awareness Flags
+
+| Flag             | Type | Default | Description                                     |
+| ---------------- | ---- | ------- | ----------------------------------------------- |
+| `--git-aware`    | bool | `true`  | Enable git-aware scanning (respects .gitignore) |
+| `--no-git-aware` | bool | `false` | Disable all git integration                     |
+| `--git-timeout`  | int  | `5`     | Timeout for git commands (seconds)              |
+
 #### File Filtering Flags
 
 | Flag             | Type    | Default   | Description                                                   |
@@ -146,6 +155,12 @@ codeecho scan . --include-exts .go,.py
 
 # Verbose scanning with detailed progress
 codeecho scan . --verbose
+
+# Disable git awareness
+codeecho scan . --no-git-aware
+
+# Increase git timeout for slow systems
+codeecho scan . --git-timeout 10
 
 # Silent scan with error reporting only
 codeecho scan . --quiet --strict

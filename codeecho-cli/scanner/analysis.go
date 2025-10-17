@@ -30,10 +30,35 @@ func NewAnalysisScanner(rootPath string, opts ScanOptions) *AnalysisScanner {
 		opts:     opts,
 		errors:   []ScanError{},
 	}
+
+	// Load Git information if git-aware mode is enabled
 	if opts.GitAware {
-		scanner.gitignore = LoadGitignorePatterns(rootPath)
-		scanner.gitMeta = LoadGitMetadata(rootPath)
+		// Load .gitignore patterns
+		gitignore, err := LoadGitignorePatterns(rootPath)
+		if err != nil {
+			scanner.errors = append(scanner.errors, ScanError{
+				Path:    filepath.Join(rootPath, ".gitignore"),
+				Phase:   "gitignore",
+				Error:   err,
+				Skipped: false,
+			})
+		}
+		scanner.gitignore = gitignore
+
+		// Load Git metadata
+		gitMeta, gitErrors := LoadGitMetadata(rootPath)
+		scanner.gitMeta = gitMeta
+
+		for _, err := range gitErrors {
+			scanner.errors = append(scanner.errors, ScanError{
+				Path:    rootPath,
+				Phase:   "git-metadata",
+				Error:   err,
+				Skipped: false,
+			})
+		}
 	}
+
 	return scanner
 }
 
