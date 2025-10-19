@@ -1,0 +1,63 @@
+# CodeEcho Configuration File Example
+# Copy to .codeecho.yaml in your project root
+
+# Output format: xml, json, or markdown
+format: xml
+
+# Git awareness - respects .gitignore and captures repo metadata
+gitAware: true
+
+# File filtering
+exclude_dirs:
+  - .git
+  - node_modules
+  - vendor
+  - dist
+  - build
+  - .vscode
+  - .idea
+  - target
+  - __pycache__
+  - .next
+
+include_exts:
+  - .go
+  - .js
+  - .ts
+  - .jsx
+  - .tsx
+  - .json
+  - .md
+  - .html
+  - .css
+  - .py
+  - .java
+  - .cpp
+  - .c
+  - .h
+  - .rs
+  - .rb
+  - .php
+  - .yml
+  - .yaml
+  - .toml
+  - .xml
+
+# Content options
+include_content: true
+include_summary: true
+include_tree: true
+show_line_numbers: true
+
+# Processing options
+compress_code: false
+remove_comments: false
+remove_empty_lines: false
+
+# Output options
+output: ""      # Leave empty for auto-generated filenames
+quiet: false
+verbose: true
+
+# Preset profiles (future expansion)
+# preset: "ai-optimized"  # minimal, comprehensive, ai-optimized, documentation

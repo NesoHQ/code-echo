@@ -15,7 +15,7 @@ type AnalysisScanner struct {
 	rootPath string
 	opts     ScanOptions
 
-	// NEW: Progress and error tracking
+	// Progress and error tracking
 	progressCallback ProgressCallback
 	errors           []ScanError
 	startTime        time.Time
@@ -62,17 +62,17 @@ func NewAnalysisScanner(rootPath string, opts ScanOptions) *AnalysisScanner {
 	return scanner
 }
 
-// NEW: Set progress callback
+// Set progress callback
 func (a *AnalysisScanner) SetProgressCallback(callback ProgressCallback) {
 	a.progressCallback = callback
 }
 
-// NEW: Get collected errors
+// Get collected errors
 func (a *AnalysisScanner) GetErrors() []ScanError {
 	return a.errors
 }
 
-// NEW: Report progress
+// Report progress
 func (a *AnalysisScanner) reportProgress(phase string, currentFile string, processed, total int) {
 	if a.progressCallback == nil {
 		return
@@ -92,7 +92,7 @@ func (a *AnalysisScanner) reportProgress(phase string, currentFile string, proce
 	a.progressCallback(progress)
 }
 
-// NEW: Record error
+// Record error
 func (a *AnalysisScanner) recordError(path string, phase string, err error) {
 	a.errors = append(a.errors, ScanError{
 		Path:    path,

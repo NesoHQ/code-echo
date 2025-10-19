@@ -39,7 +39,7 @@ func CountLines(content string) int {
 	return lines
 }
 
-// NEW: Format duration human-readable
+// Format duration human-readable
 func FormatDuration(d time.Duration) string {
 	if d < time.Second {
 		return fmt.Sprintf("%dms", d.Milliseconds())
@@ -57,7 +57,7 @@ func FormatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dh %dm", hours, minutes)
 }
 
-// NEW: Create a simple progress bar
+// Create a simple progress bar
 func CreateProgressBar(current, total int, width int) string {
 	if total == 0 {
 		return "[" + strings.Repeat("█", width) + "]"
@@ -74,7 +74,7 @@ func CreateProgressBar(current, total int, width int) string {
 	return fmt.Sprintf("[%s] %d%%", bar, int(percentage*100))
 }
 
-// NEW: Format ETA based on progress
+// Format ETA based on progress
 func EstimateTimeRemaining(processed, total int, elapsed time.Duration) string {
 	if processed == 0 || total == 0 {
 		return "calculating..."

@@ -81,7 +81,6 @@ func init() {
 	scanCmd.Flags().BoolVar(&compressCode, "compress-code", false, "Remove unnecessary whitespace from code")
 	scanCmd.Flags().BoolVar(&removeComments, "remove-comments", false, "Strip comments from source files")
 	scanCmd.Flags().BoolVar(&removeEmptyLines, "remove-empty-lines", false, "Remove empty lines from files")
-
 	scanCmd.Flags().BoolVar(&includeContent, "content", true, "Include file contents")
 	scanCmd.Flags().BoolVar(&excludeContent, "no-content", false, "Exclude file contents (structure only)")
 	scanCmd.Flags().StringSliceVar(&excludeDirs, "exclude-dirs",
@@ -96,15 +95,16 @@ func init() {
 	scanCmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress output")
 	scanCmd.Flags().BoolVar(&strictMode, "strict", false, "Fail immediately on any error")
 
-	// NEW: Config file flag
+	// Config file flag
 	scanCmd.Flags().StringVar(&configFile, "config", "", "Path to .codeecho.yaml or .codeecho.json config file")
 
+	// Git Flags
 	scanCmd.Flags().BoolVar(&gitAware, "git-aware", true, "Enable git-aware scanning")
 	scanCmd.Flags().BoolVar(&noGitAware, "no-git-aware", false, "Disable git integration")
 	scanCmd.Flags().IntVar(&gitTimeout, "git-timeout", 5, "Timeout for git commands in seconds")
 }
 
-// NEW: Track which CLI flags were explicitly set
+// Track which CLI flags were explicitly set
 // Why: Distinguish between "user didn't set flag" vs "flag has default value"
 // This allows config file to provide defaults while CLI overrides them
 func getCliOverrides(cmd *cobra.Command) map[string]bool {
@@ -149,7 +149,7 @@ func getCliOverrides(cmd *cobra.Command) map[string]bool {
 	return overrides
 }
 
-// NEW: Load and merge configuration
+// Load and merge configuration
 // Why: Centralize config logic, make it testable
 func loadAndMergeConfig(targetPath string, cmd *cobra.Command) error {
 	// Step 1: Determine which config file to load
@@ -209,7 +209,7 @@ func loadAndMergeConfig(targetPath string, cmd *cobra.Command) error {
 	return nil
 }
 
-// NEW: Merge config file values into global flag variables
+// Merge config file values into global flag variables
 // Why: Modify the actual flags so rest of code sees merged values
 func mergeConfigIntoFlags(cfg *config.ConfigFile, cliOverrides map[string]bool) {
 	// Format: handled separately in runScan
@@ -300,7 +300,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	// NEW: Load config before proceeding with scan
+	// Load config before proceeding with scan
 	// Why: Do this early so all subsequent operations use merged config
 	if err := loadAndMergeConfig(absPath, cmd); err != nil {
 		// Config errors should be shown but not fatal (unless we want strict mode)
@@ -445,7 +445,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if err := writer.WriteGitMetadata(gitMeta); err != nil {
 		return fmt.Errorf("failed to write git metadata: %w", err)
 	}
-	// NEW: Setup progress tracking
+	// Setup progress tracking
 	if !quiet {
 		streamingScanner.SetProgressCallback(createProgressDisplay(verbose))
 	}
@@ -457,7 +457,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 	stats, err := streamingScanner.Scan()
 
-	// NEW: Check for errors in strict mode
+	// Check for errors in strict mode
 	scanErrors := streamingScanner.GetErrors()
 	if strictMode && len(scanErrors) > 0 {
 		return fmt.Errorf("scan failed in strict mode: %d errors encountered", len(scanErrors))
@@ -479,13 +479,13 @@ func runScan(cmd *cobra.Command, args []string) error {
 		fmt.Print("\r\033[K") // Clear current line
 	}
 
-	// NEW: Display comprehensive summary
+	// Display comprehensive summary
 	displayScanSummary(outputFilePath, stats, scanErrors, duration)
 
 	return nil
 }
 
-// NEW: Create progress display function
+// Create progress display function
 // Why: Centralized progress handling with verbose/quiet modes
 func createProgressDisplay(verbose bool) scanner.ProgressCallback {
 	var lastUpdate time.Time
@@ -526,7 +526,7 @@ func createProgressDisplay(verbose bool) scanner.ProgressCallback {
 	}
 }
 
-// NEW: Display comprehensive scan summary
+// Display comprehensive scan summary
 // Why: Users need to see what happened - success, warnings, errors
 func displayScanSummary(outputPath string, stats *scanner.StreamingStats, errors []scanner.ScanError, duration time.Duration) {
 	fmt.Printf("\n✅ Output written to %s\n", outputPath)
@@ -581,7 +581,7 @@ func displayScanSummary(outputPath string, stats *scanner.StreamingStats, errors
 		}
 	}
 
-	// NEW: Display errors if any
+	// Display errors if any
 	if len(errors) > 0 {
 		fmt.Printf("\n⚠️  Warnings/Errors: %d issues encountered\n", len(errors))
 

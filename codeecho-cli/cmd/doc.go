@@ -16,7 +16,6 @@ import (
 var (
 	docOutputFile string
 	docType       string
-	// NEW: Add quiet and verbose flags for doc command
 	docVerbose bool
 	docQuiet   bool
 )
@@ -50,11 +49,9 @@ Examples:
 func init() {
 	rootCmd.AddCommand(docCmd)
 
-	// Add flags
 	docCmd.Flags().StringVarP(&docOutputFile, "output", "o", "", "Output file (default: README.md)")
 	docCmd.Flags().StringVarP(&docType, "type", "t", "readme", "Documentation type: readme, api, overview")
 
-	// NEW: Add progress flags
 	docCmd.Flags().BoolVarP(&docVerbose, "verbose", "v", false, "Show detailed progress information")
 	docCmd.Flags().BoolVarP(&docQuiet, "quiet", "q", false, "Suppress progress output")
 }
@@ -78,7 +75,7 @@ func scanRepository(path string, showProgress bool, verbose bool) (*ScanResult, 
 	// Use analysis scanner (not streaming) for full in-memory analysis
 	analysisScanner := scanner.NewAnalysisScanner(path, opts)
 
-	// NEW: Add progress callback if requested
+	// Add progress callback if requested
 	if showProgress {
 		analysisScanner.SetProgressCallback(func(progress scanner.ScanProgress) {
 			if verbose {
@@ -138,7 +135,7 @@ func runDoc(cmd *cobra.Command, args []string) error {
 		fmt.Printf("📚 Generating %s documentation for %s...\n", docType, absPath)
 	}
 
-	// NEW: Use progress-aware scan
+	// Use progress-aware scan
 	result, err := scanRepository(absPath, !docQuiet, docVerbose)
 
 	// Clear progress line if it was shown
@@ -192,7 +189,7 @@ func runDoc(cmd *cobra.Command, args []string) error {
 
 	duration := time.Since(startTime)
 
-	// NEW: Enhanced summary
+	// Enhanced summary
 	if !docQuiet {
 		fmt.Printf("\n✅ Documentation written to %s\n", outputFile)
 		fmt.Printf("📊 Summary:\n")

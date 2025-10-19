@@ -53,7 +53,7 @@ type ScanProgress struct {
 	Percentage     float64 // 0-100
 }
 
-// NEW: Error tracking
+// Error tracking
 type ScanError struct {
 	Path    string // File path that caused error
 	Phase   string // "read", "parse", "write"
@@ -61,7 +61,7 @@ type ScanError struct {
 	Skipped bool   // Was the file skipped or did scan fail?
 }
 
-// NEW: Complete scan report
+// Complete scan report
 type ScanReport struct {
 	Stats        *StreamingStats
 	Errors       []ScanError
@@ -71,5 +71,5 @@ type ScanReport struct {
 	Success      bool
 }
 
-// NEW: Progress callback
+// Progress callback
 type ProgressCallback func(progress ScanProgress)

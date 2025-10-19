@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "codeecho",
 	Short: "CodeEcho - Make your repository AI-ready",
@@ -24,8 +23,6 @@ Perfect for:
 	Version: "1.0.0-beta",
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {

@@ -17,14 +17,14 @@ type StreamingScanner struct {
 	fileHandler func(*FileInfo) error
 	treeWriter  func([]string) error
 
-	// NEW: Progress and error tracking
+	// Progress and error tracking
 	progressCallback ProgressCallback
 	errors           []ScanError
 
 	stats     *StreamingStats
 	filePaths []string
 
-	// NEW: Timing
+	// Timing
 	startTime time.Time
 
 	gitignore *ignore.GitIgnore
@@ -86,7 +86,7 @@ func NewStreamingScanner(rootPath string, opts ScanOptions, fileHandler func(*Fi
 	return scanner
 }
 
-// NEW: Set progress callback
+// Set progress callback
 // Why: Allow external progress monitoring
 func (s *StreamingScanner) SetProgressCallback(callback ProgressCallback) {
 	s.progressCallback = callback
@@ -100,13 +100,13 @@ func (s *StreamingScanner) GetFilePaths() []string {
 	return s.filePaths
 }
 
-// NEW: Get collected errors
+// Get collected errors
 // Why: Return all errors at the end
 func (s *StreamingScanner) GetErrors() []ScanError {
 	return s.errors
 }
 
-// NEW: Report progress
+// Report progress
 // Why: Centralized progress reporting
 func (s *StreamingScanner) reportProgress(phase string, currentFile string) {
 	if s.progressCallback == nil {
@@ -129,7 +129,7 @@ func (s *StreamingScanner) reportProgress(phase string, currentFile string) {
 	s.progressCallback(progress)
 }
 
-// NEW: Record error
+// Record error
 // Why: Collect errors instead of just logging
 func (s *StreamingScanner) recordError(path string, phase string, err error, skipped bool) {
 	s.errors = append(s.errors, ScanError{
@@ -162,7 +162,7 @@ func (s *StreamingScanner) collectPaths() error {
 			return filepath.SkipDir
 		}
 
-		// NEW: Check .gitignore if enabled
+		// Check .gitignore if enabled
 		if s.opts.GitAware && s.gitignore != nil {
 			relativePath := utils.GetRelativePath(s.rootPath, path)
 			if IsIgnoredByGitignore(relativePath, s.gitignore) {
@@ -218,7 +218,7 @@ func (s *StreamingScanner) Scan() (*StreamingStats, error) {
 			return filepath.SkipDir
 		}
 
-		// NEW: Check .gitignore if enabled
+		// Check .gitignore if enabled
 		if s.opts.GitAware && s.gitignore != nil {
 			relativePath := utils.GetRelativePath(s.rootPath, path)
 			if IsIgnoredByGitignore(relativePath, s.gitignore) {
@@ -243,7 +243,7 @@ func (s *StreamingScanner) Scan() (*StreamingStats, error) {
 	return s.stats, err
 }
 
-// Update: Separated file processing
+// Separated file processing
 // Why: Makes error handling cleaner and more testable
 func (s *StreamingScanner) processFile(path string, d fs.DirEntry) error {
 	info, err := d.Info()
