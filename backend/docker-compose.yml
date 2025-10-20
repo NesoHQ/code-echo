@@ -1,0 +1,72 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - '${PORT:-4000}:4000'
+    depends_on:
+      - postgres
+      - rabbitmq
+      - minio
+      - codeecho-cli
+    networks:
+      - codeecho-net
+    volumes:
+      - ./data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: codeecho
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - codeecho-net
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+    networks:
+      - codeecho-net
+
+  minio:
+    image: minio/minio
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minio}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minio123}
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio-data:/data
+    networks:
+      - codeecho-net
+
+  codeecho-cli:
+    build:
+      context: ../codeecho-cli
+      dockerfile: Dockerfile
+    image: ${CODEECHO_DOCKER_IMAGE:-neso/codeecho:local}
+    networks:
+      - codeecho-net
+
+volumes:
+  pgdata:
+  minio-data:
+
+networks:
+  codeecho-net:
+    driver: bridge
