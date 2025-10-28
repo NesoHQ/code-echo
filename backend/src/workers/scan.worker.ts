@@ -1,110 +1,194 @@
-import { Worker, Job } from "bullmq";
-import { connection, closeQueue } from "../services/queue.service";
-import { runCodeEchoCLI } from "../services/docker-runner";
-import path from "path";
-import fs from "fs";
-import os from "os";
-import { v4 as uuidv4 } from "uuid";
+import { Worker, Job } from 'bullmq';
+import path from 'path';
+import fs from 'fs';
+import simpleGit from 'simple-git';
+import unzipper from 'unzipper';
+import { v4 as uuidv4 } from 'uuid';
+import { connection, closeQueue } from '../services/queue.service';
+import { runCodeEchoCLI } from '../services/cli-runner';
+import { updateJobStatus } from '../services/job.service';
+
+const QUEUE_NAME = 'scan-jobs';
+const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 2);
+const PREFIX = process.env.BULLMQ_PREFIX ?? 'codeecho';
+
+const MAX_EXTRACT_FILES = Number(process.env.MAX_EXTRACT_FILES ?? 5000);
+const MAX_ZIP_SIZE = Number(process.env.MAX_ZIP_SIZE_BYTES ?? 200 * 1024 * 1024);
+const GIT_CLONE_TIMEOUT_MS = Number(process.env.GIT_CLONE_TIMEOUT_MS ?? 120_000);
+const SCAN_TIMEOUT_MS = Number(process.env.SCAN_TIMEOUT_MS ?? 10 * 60_000);
+
+console.log('scan.worker starting — QUEUE_NAME=', QUEUE_NAME, ' TEMP_DIR=', process.env.TEMP_DIR);
 
 interface ScanJobData {
-  repoUrl?: string;
-  zipPath?: string;
+	jobId?: string;
+	repoUrl?: string;
+	zipPath?: string;
+	source?: 'git' | 'upload' | 'path';
 }
 
-const QUEUE_NAME = "scan-jobs";
-const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 2);
-const PREFIX = process.env.BULLMQ_PREFIX ?? "codeecho";
+// safety: prevent zip-slip
+function safeResolveExtract(dest: string, entryPath: string) {
+	const resolved = path.resolve(dest, entryPath);
+	if (!resolved.startsWith(dest + path.sep)) {
+		throw new Error('Zip contains invalid entry (zip-slip)');
+	}
+	return resolved;
+}
 
-/**
- * Process a single scan job.
- * Defensive: job.id may be undefined according to types, so create a stable string id to use.
- */
+async function extractZipSafe(zipPath: string, dest: string) {
+	const st = await fs.promises.stat(zipPath);
+	if (st.size > MAX_ZIP_SIZE) throw new Error('Zip too large');
+
+	const dir = await unzipper.Open.file(zipPath);
+	if (dir.files.length > MAX_EXTRACT_FILES) throw new Error('Zip has too many files');
+
+	for (const entry of dir.files) {
+		const target = safeResolveExtract(dest, entry.path);
+		if (entry.type === 'Directory') {
+			await fs.promises.mkdir(target, { recursive: true });
+		} else {
+			await fs.promises.mkdir(path.dirname(target), { recursive: true });
+			await new Promise<void>((resolve, reject) => {
+				entry
+					.stream()
+					.pipe(fs.createWriteStream(target, { mode: 0o600 }))
+					.on('finish', () => resolve())
+					.on('error', (e) => reject(e));
+			});
+		}
+	}
+}
+
+async function cloneRepo(repoUrl: string, dest: string) {
+	try {
+		const exists = await fs.promises
+			.stat(dest)
+			.then(() => true)
+			.catch(() => false);
+
+		if (exists) {
+			const files = await fs.promises.readdir(dest);
+			if (files.length > 0) {
+				console.log(`[worker] Cleaning existing directory before clone: ${dest}`);
+				await fs.promises.rm(dest, { recursive: true, force: true });
+			}
+		}
+	} catch (err) {
+		console.warn(`[worker] Failed to check or clean existing directory ${dest}:`, err);
+	}
+	const git = simpleGit();
+	await git.clone(repoUrl, dest, ['--depth', '1']);
+}
+
+async function runWithTimeout<T>(fn: () => Promise<T>, ms: number, onTimeout?: () => Promise<void>) {
+	let timedOut = false;
+	const timer = new Promise<never>((_, rej) => {
+		const t = setTimeout(() => {
+			timedOut = true;
+			(onTimeout ? onTimeout() : Promise.resolve()).finally(() => rej(new Error('operation timed out')));
+		}, ms);
+	});
+	try {
+		return await Promise.race([fn(), timer]);
+	} finally {
+		if (timedOut) {
+			// nothing
+		}
+	}
+}
+
 async function processScanJob(job: Job<ScanJobData>) {
-  const jobId = job.id?.toString() ?? uuidv4();
-  console.log(`Worker started job ${jobId} (internal job.id=${String(job.id)})`);
-  console.log("Job data:", job.data);
+	// Use DB-safe UUID as our job primary key
+	const dbJobId = job.data.jobId ?? uuidv4();
+	console.log(`Worker started job dbJobId=${dbJobId} (queue id=${String(job.id)})`);
 
-  // Prepare workspace
-  const workspace = path.resolve(os.tmpdir(), `codeecho-job-${jobId}`);
-  try {
-    await fs.promises.mkdir(workspace, { recursive: true });
-  } catch (err) {
-    console.error(`[${jobId}] failed to create workspace ${workspace}:`, err);
-    throw err;
-  }
+	const root = path.resolve(process.env.TEMP_DIR ?? '/app/data/outputs', dbJobId);
+	await fs.promises.mkdir(root, { recursive: true });
 
-  try {
-    // Run the CLI (this will stream logs in docker-runner)
-    await runCodeEchoCLI({ workspace, jobId });
+	const logPath = path.join(root, 'run.log');
+	const logStream = fs.createWriteStream(logPath, { flags: 'a', mode: 0o600 });
+	const log = (...args: any[]) => {
+		const line = `[${new Date().toISOString()}] ` + args.map(String).join(' ');
+		console.log(line);
+		logStream.write(line + '\n');
+	};
+	log(`Workspace root resolved to: ${root}`);
 
-    const outputPath = path.join(workspace, "output.xml");
-    if (!(await exists(outputPath))) {
-      throw new Error(`Expected output missing at ${outputPath}`);
-    }
+	try {
+		await updateJobStatus(dbJobId, 'running', { progress: '5' });
 
-    console.log(`Job ${jobId} done - result stored at ${outputPath}`);
-    return { status: "done", output: outputPath };
-  } catch (rawErr) {
-    const errMsg = rawErr instanceof Error ? rawErr.message : String(rawErr);
-    console.error(`Job ${jobId} failed:`, errMsg);
-    // Keep the error so BullMQ can register failure and retries
-    throw new Error(errMsg);
-  } finally {
-    // Optionally keep workspace for debugging. If you want to cleanup, uncomment:
-    // try { await fs.promises.rm(workspace, { recursive: true, force: true }); } catch (e) { /* log if needed */ }
-  }
+		if (job.data.repoUrl) {
+			log(`Cloning ${job.data.repoUrl} -> ${root}`);
+			await runWithTimeout(() => cloneRepo(job.data.repoUrl!, root), GIT_CLONE_TIMEOUT_MS);
+		} else if (job.data.zipPath) {
+			log(`Extracting zip ${job.data.zipPath} -> ${root}`);
+			await extractZipSafe(job.data.zipPath, root);
+		} else {
+			log(`No repoUrl/zipPath provided; scanning existing workspace ${root}`);
+		}
+
+		log(`Running CodeEcho CLI for job ${dbJobId}`);
+		await updateJobStatus(dbJobId, 'running', { progress: '25' });
+
+		await runWithTimeout(
+			() => runCodeEchoCLI({ workspace: root, jobId: dbJobId, flags: [], logStream }),
+			SCAN_TIMEOUT_MS,
+			async () => {
+				log('Scan timed out');
+			}
+		);
+
+		const outputPath = path.join(root, 'output.xml');
+		await fs.promises.access(outputPath);
+
+		await updateJobStatus(dbJobId, 'done', { resultUrl: outputPath, progress: '100' });
+		log(`Job ${dbJobId} done -> ${outputPath}`);
+		logStream.end();
+		return { status: 'done', output: outputPath };
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		console.error(`Job ${dbJobId} failed:`, msg);
+		log(`ERROR: ${msg}`);
+		try {
+			await updateJobStatus(dbJobId, 'failed', { error: msg, progress: '100' });
+		} catch (e) {
+			console.error('Failed to update DB:', e);
+		}
+		logStream.end();
+		throw new Error(msg);
+	}
 }
 
-// helper
-async function exists(p: string) {
-  try {
-    await fs.promises.access(p);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// Create worker instance
+// Create worker
 export const scanWorker = new Worker<ScanJobData>(QUEUE_NAME, processScanJob, {
-  connection,
-  concurrency: CONCURRENCY,
-  prefix: PREFIX,
+	connection,
+	concurrency: CONCURRENCY,
+	prefix: PREFIX,
 });
 
-// Correct event signatures per bullmq:
-// completed(jobId, returnValue), failed(jobId, failedReason), error(err)
-scanWorker.on("completed", (jobId, returnValue) => {
-  console.log(`Job ${String(jobId)} completed. result:`, returnValue);
+scanWorker.on('completed', (jobId, returnValue) => {
+	console.log(`Job ${String(jobId)} completed. result:`, returnValue);
+});
+scanWorker.on('failed', (jobId, failedReason) => {
+	console.error(`Job ${String(jobId)} failed:`, failedReason);
+});
+scanWorker.on('error', (err) => {
+	console.error('Worker error:', err);
 });
 
-scanWorker.on("failed", (jobId, failedReason) => {
-  console.error(`Job ${String(jobId)} failed:`, failedReason);
-});
-
-scanWorker.on("error", (err) => {
-  console.error("Worker error:", err instanceof Error ? err.message : String(err));
-});
-
-console.log(`Scan worker initialized (queue=${QUEUE_NAME}, prefix=${PREFIX}, concurrency=${CONCURRENCY})`);
-
-// Graceful shutdown with timeout
+// graceful shutdown
 async function shutdown(signal: string) {
-  console.log(`Received ${signal}, closing worker...`);
-  try {
-    // close worker (stop processing new jobs and wait for active jobs to finish)
-    await scanWorker.close();
-    // close queue related resources
-    await closeQueue();
-    console.log("Worker and queue closed gracefully.");
-    // allow logs to flush
-    setTimeout(() => process.exit(0), 250);
-  } catch (err) {
-    console.error("Error during shutdown:", err);
-    // force exit after short timeout
-    setTimeout(() => process.exit(1), 250);
-  }
+	console.log(`Received ${signal}, shutting down worker`);
+	try {
+		await scanWorker.close();
+		await closeQueue();
+		console.log('Graceful shutdown complete');
+		process.exit(0);
+	} catch (err) {
+		console.error('Error during shutdown:', err);
+		process.exit(1);
+	}
 }
 
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

@@ -1,65 +1,67 @@
-# FROM node:20-alpine
-# WORKDIR /app
-# RUN apk add --no-cache bash git
-# RUN npm i -g pnpm@10.18.3
-# COPY package.json pnpm-lock.yaml ./
-# RUN pnpm install --frozen-lockfile
-# COPY . .
-# EXPOSE 4000
-# CMD ["pnpm", "dev"]
-
-
-# ---- Build the Go CLI binary ----
+# ================================
+# Stage 1: Build Go CLI binary
+# ================================
 FROM golang:1.25-alpine AS cli-builder
-WORKDIR /app
-COPY codeecho-cli/ .
-RUN go mod download && \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o codeecho ./main.go
+WORKDIR /src
+RUN apk add --no-cache git
+COPY ../codeecho-cli ./
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o codeecho ./main.go
 
-# ---- Backend Node.js environment ----
-FROM node:20-alpine
+# ================================
+# Stage 2: Install dependencies
+# ================================
+FROM node:20-alpine AS deps
 WORKDIR /app
+RUN apk add --no-cache python3 make g++ bash git
+RUN npm i -g pnpm@10.18.3
+COPY backend/package.json backend/pnpm-lock.yaml ./
+RUN pnpm fetch
 
+# ================================
+# Stage 3: Build backend (TypeScript → JS)
+# ================================
+FROM deps AS builder
+WORKDIR /app
+COPY backend ./
+ENV CI=true
+RUN pnpm install --offline --frozen-lockfile
+RUN pnpm run build
+
+# Verify build output
+RUN ls -la /app/dist || (echo "❌ dist folder not found. Check tsconfig and build script." && exit 1)
+
+# ================================
+# Stage 4: Runtime image
+# ================================
+FROM node:20-alpine AS runtime
+WORKDIR /app
 RUN apk add --no-cache bash git
 RUN npm i -g pnpm@10.18.3
 
-COPY backend/package.json backend/pnpm-lock.yaml ./
+# Copy compiled app + dependencies
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/pnpm-lock.yaml ./
+ENV NODE_ENV=production
 RUN pnpm install --frozen-lockfile
 
-# Copy source code and .env file
-COPY . .
+# Copy CLI binary
+COPY --from=cli-builder /src/codeecho /usr/local/bin/codeecho
+RUN chmod +x /usr/local/bin/codeecho
 
-# Copy CLI binary from Go builder
-COPY --from=cli-builder /app/codeecho /usr/local/bin/codeecho
+# Add a non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
+# Create writable directory for outputs
+ENV TEMP_DIR=/app/data/outputs
+RUN mkdir -p ${TEMP_DIR} && chown -R appuser:appgroup ${TEMP_DIR}
+
+USER appuser
 EXPOSE 4000
-CMD ["pnpm", "dev"]
 
+# Healthcheck for container monitoring
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:4000/health || exit 1
 
-
-# Production file
-# ===== Base Stage =====
-# FROM node:20-alpine AS base
-# WORKDIR /app
-# COPY package.json pnpm-lock.yaml ./
-# RUN apk add --no-cache python3 make g++ bash git
-# RUN npm i -g pnpm@10.18.3
-# RUN pnpm install --frozen-lockfile
-
-# ===== Build Stage =====
-# FROM base AS builder
-# COPY . .
-# RUN pnpm run build
-
-# ===== Runtime Stage =====
-# FROM node:20-alpine AS runtime
-# WORKDIR /app
-# ENV NODE_ENV=production
-# COPY --from=builder /app/package.json ./
-# COPY --from=builder /app/pnpm-lock.yaml ./
-# COPY --from=builder /app/dist ./dist
-# RUN npm i -g pnpm@10.18.3
-# RUN pnpm install --prod --frozen-lockfile
-# EXPOSE 4000
-# CMD ["node", "dist/index.js"]
-
+# Start backend
+CMD ["pnpm", "start"]

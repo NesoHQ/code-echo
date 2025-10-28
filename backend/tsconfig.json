@@ -1,6 +1,6 @@
 {
 	"compilerOptions": {
-		"module": "ESNext",
+		"module": "CommonJS",
 		"target": "ES2020",
 		"moduleResolution": "node",
 		"esModuleInterop": true,
@@ -17,5 +17,5 @@
 			"*": ["node_modules/*"]
 		}
 	},
-	"include": ["src", "src/types/**/*.d.ts"]
+	"include": ["src", "src/types/**/*.d.ts", "drizzle.config.ts"]
 }
