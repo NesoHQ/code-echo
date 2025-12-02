@@ -1,0 +1,22 @@
+FROM node:20-alpine
+
+# System packages for dev (git, build tools)
+RUN apk add --no-cache python3 make g++ bash git
+
+WORKDIR /app
+
+# Install pnpm
+RUN npm i -g pnpm@10.18.3
+
+# Only copy package manifest to leverage docker cache
+COPY backend/package.json backend/pnpm-lock.yaml ./
+
+# Install all deps (including devDependencies) inside the image
+RUN pnpm install
+
+# Expose app port and optional debug
+EXPOSE 4000
+EXPOSE 9229
+
+# Run dev script by default (overridden by compose command if needed)
+CMD ["pnpm", "dev"]
